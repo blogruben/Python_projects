@@ -1,0 +1,128 @@
+#!/bin/bash
+# It is a build tool and helps for CI/CD
+# In Windows env use Cygwin ti exec
+#
+# To use it run:
+# ./deploy <arg1> <arg2> <arg3> ...
+# Example: ./deploy print_date
+# ARGUMENTS:
+# -  state
+# -  start
+# -  stop
+# -  push
+
+
+echo ""
+echo "EXECUTE -> DEPLOY $@"
+
+
+status() {
+    echo "******** STATE ********"
+    echo "1/4 EXECUTE -> docker ps -a" 
+    sleep 1
+    docker ps -a
+    echo "2/4 EXECUTE -> docker images" 
+    sleep 1
+    docker images
+    echo "3/4 EXECUTE -> docker volume ls" 
+    sleep 1
+    docker volume ls
+    echo "4/4 EXECUTE -> docker compose logs"
+    sleep 2
+}
+stop() {
+    echo "******** SHUT DOWN ********"
+    echo "1/8 EXECUTE -> docker compose down -v"
+    docker compose down -v
+    echo "2/8 EXECUTE -> docker rm -f $(docker ps -a -q)"
+    docker rm -f $(docker ps -a -q) #Clear container if exists
+    echo "3/8 EXECUTE -> docker image rm fastapi"
+    docker image rm fastapi #Clear image 
+    # No volumes to delete.
+    echo "4/8 EXECUTE -> rm -r ./mysql/data/* && touch ./mysql/data/.gitkeep" 
+    rm -r ./mysql/data/* # Clear mysql/data
+    touch ./mysql/data/.gitkeep
+    echo "5/8 EXECUTE -> rm -rf ./src/__pycache__" 
+    rm -rf ./src/__pycache__ # remove recursive force
+    echo "6/8 EXECUTE -> docker ps -a" 
+    docker ps -a
+    echo "7/8 EXECUTE -> docker images" 
+    docker images
+    echo "8/8 EXECUTE -> docker volume ls" 
+    docker volume ls
+}
+start() {
+    echo "******** START UP ********"
+    echo "1/7 EXECUTE -> docker compose pull"
+    docker compose pull
+    echo "2/7 EXECUTE -> docker build --tag fastapi ."
+    docker build --tag fastapi .
+    echo "3/7 EXECUTE -> docker compose up -d"
+    docker compose up -d
+    echo "4/7 EXECUTE -> docker ps -a" 
+    sleep 1
+    docker ps -a
+    echo "5/7 EXECUTE -> docker images" 
+    sleep 1
+    docker images
+    echo "6/7 EXECUTE -> docker volume ls" 
+    sleep 1
+    docker volume ls
+    echo "7/7 EXECUTE -> docker compose logs"
+    sleep 2
+    docker compose logs
+
+### escribir web para acceder
+
+}
+
+push() {
+    echo "******** PUSH ********"
+    #Add all files to stagged area except .env that contains the passwords
+    echo "EXECUTE -> git add $(echo $(git diff --name-only \
+    --relative) | xargs echo $(git ls-files \
+    --others --exclude-standard) | sed 's/.env//')"
+    git add $(echo $(git diff --name-only \
+    --relative) | xargs echo $(git ls-files \
+    --others --exclude-standard) | sed 's/.env//')
+    echo "EXECUTE -> git status"
+    git status
+    echo -n "¿Continuar? y/n "
+    read answer
+    if [ $answer = 'y'  ]; then
+		echo "EXECUTE -> Continuar"
+        echo -n "Escribir comentario -> "
+        read commit
+        echo "EXECURE -> git commit -m '$commit'"
+        git commit -m "$commit"
+        echo "EXECURE -> git push"
+        git push
+	else
+		echo "EXECUTE -> Restablecer"
+        # Put stagged changes in the working directory
+        for i in `git diff --name-only --cached`; do echo "git restore --staged $i"; done
+        for i in `git diff --name-only --cached`; do git restore --staged "$i"; done
+	fi
+    git status
+
+}
+
+
+
+# Iterate over input arguments
+for i in $@; do
+	#echo $j
+    if [ $i = 'status' ]; then
+	    status;
+    fi
+    if [ $i = 'stop' ]; then
+	    stop;
+    fi
+    if [ $i = 'start' ]; then
+	    start;
+    fi
+    if [ $i = 'push' ]; then
+	    push;
+    fi
+done
+
